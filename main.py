@@ -1,5 +1,5 @@
 from telegram import InlineQueryResultArticle, InputTextMessageContent, Update
-from telegram.ext import ApplicationBuilder, ContextTypes, InlineQueryHandler
+from telegram.ext import ApplicationBuilder, ContextTypes, InlineQueryHandler, CommandHandler
 import os
 from uuid import uuid4
 from urllib.parse import quote
@@ -51,6 +51,14 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Fehler beim Senden der Antwort an {username}: {e}")
 
+# /start-Befehl für Debugging
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    username = user.username or user.first_name
+    logger.info(f"/start received from {username} ({user.id})")
+
+    await update.message.reply_text("Bot läuft und ist bereit für Inline-Anfragen!")
+
 if __name__ == "__main__":
     token = os.getenv("BOT_TOKEN")
     webhook_url = os.getenv("WEBHOOK_URL")
@@ -58,6 +66,7 @@ if __name__ == "__main__":
 
     app = ApplicationBuilder().token(token).build()
     app.add_handler(InlineQueryHandler(inline_query))
+    app.add_handler(CommandHandler("start", start))
 
     logger.info("Bot wird gestartet...")
     app.run_webhook(
