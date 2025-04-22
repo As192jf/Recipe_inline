@@ -1,6 +1,6 @@
 from telegram import InlineQueryResultArticle, InputTextMessageContent, Update
 from telegram.ext import ApplicationBuilder, ContextTypes, InlineQueryHandler, CommandHandler
-from aiohttp import web  # NEU
+from aiohttp import web
 import os
 from uuid import uuid4
 from urllib.parse import quote
@@ -52,35 +52,41 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Fehler beim Senden der Antwort an {username}: {e}")
 
-# /start-Befehl für Debugging
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     username = user.username or user.first_name
     logger.info(f"/start received from {username} ({user.id})")
     await update.message.reply_text("Bot läuft und ist bereit für Inline-Anfragen!")
 
-# Neue /ping Route für GET-Anfragen
-async def ping(request):
-    return web.Response(text="pong")
+# Health check route handler
+async def health_check():
+    return web.Response(text="OK")
 
 if __name__ == "__main__":
     token = os.getenv("BOT_TOKEN")
     webhook_url = os.getenv("WEBHOOK_URL")
     port = int(os.getenv("PORT", 10000))
 
+    # Bot-Anwendung erstellen
     app = ApplicationBuilder().token(token).build()
     app.add_handler(InlineQueryHandler(inline_query))
     app.add_handler(CommandHandler("start", start))
 
     logger.info("Bot wird gestartet...")
 
-    # Aiohttp-App mit /ping-Route
-    web_app = web.Application()
-    web_app.add_routes([web.get("/ping", ping)])
-
+    # Webhook einrichten
     app.run_webhook(
         listen="0.0.0.0",
         port=port,
         webhook_url=webhook_url,
-        web_app=web_app
+        # Health check Route hinzufügen
+        webhook_url_path="/webhook",  # Telegram webhook path
+        secret_token=None,  # Optional: Secret token for webhook
     )
+
+    # Health check route auf separatem Port (optional)
+    health_app = web.Application()
+    health_app.router.add_get("/ping", health_check)
+    
+    # Health check server starten
+    web.run_app(health_app, host="0.0.0.0", port=port+1)
