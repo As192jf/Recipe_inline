@@ -4,6 +4,8 @@ import os
 from uuid import uuid4
 from urllib.parse import quote
 import logging
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
 
 # Logging konfigurieren
 logging.basicConfig(
@@ -15,11 +17,11 @@ logger = logging.getLogger(__name__)
 # Autorisierte Telegram-User laden
 AUTHORIZED_IDS = list(map(int, os.getenv("AUTHORIZED_USERS", "").split(",")))
 
+# Telegram-Handler für Inline
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.inline_query.from_user
     user_id = user.id
     username = user.username or user.first_name
-
     query = update.inline_query.query.strip()
 
     if user_id not in AUTHORIZED_IDS:
@@ -56,19 +58,42 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     username = user.username or user.first_name
     logger.info(f"/start received from {username} ({user.id})")
-
     await update.message.reply_text("Bot läuft und ist bereit für Inline-Anfragen!")
 
+# HTTP-Handler für Ping-Route
+class PingHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/ping":
+            self.send_response(200)
+            self.send_header("Content-type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"pong")
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+def start_ping_server(port):
+    server = HTTPServer(("0.0.0.0", port), PingHandler)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.daemon = True
+    thread.start()
+    logger.info(f"/ping-Server läuft auf Port {port}")
+
+# Hauptprogramm
 if __name__ == "__main__":
     token = os.getenv("BOT_TOKEN")
     webhook_url = os.getenv("WEBHOOK_URL")
     port = int(os.getenv("PORT", 10000))
 
+    # Starte den separaten /ping-Server
+    start_ping_server(port)
+
+    # Telegram-Bot starten
     app = ApplicationBuilder().token(token).build()
     app.add_handler(InlineQueryHandler(inline_query))
     app.add_handler(CommandHandler("start", start))
 
-    logger.info("Bot wird gestartet...")
+    logger.info("Telegram-Bot wird gestartet...")
     app.run_webhook(
         listen="0.0.0.0",
         port=port,
