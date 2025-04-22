@@ -4,7 +4,8 @@ import os
 from uuid import uuid4
 from urllib.parse import quote
 import logging
-import json
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
 
 # Logging konfigurieren
 logging.basicConfig(
@@ -59,9 +60,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"/start received from {username} ({user.id})")
     await update.message.reply_text("Bot läuft und ist bereit für Inline-Anfragen!")
 
-# Ping-Handler für Webserver
-async def ping_handler(request):
-    return {"statusCode": 200, "body": "pong"}
+# HTTP-Handler für Ping-Route
+class PingHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/ping":
+            self.send_response(200)
+            self.send_header("Content-type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"pong")
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+def start_ping_server(port):
+    server = HTTPServer(("0.0.0.0", port), PingHandler)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.daemon = True
+    thread.start()
+    logger.info(f"/ping-Server läuft auf Port {port}")
 
 # Hauptprogramm
 if __name__ == "__main__":
@@ -69,24 +85,17 @@ if __name__ == "__main__":
     webhook_url = os.getenv("WEBHOOK_URL")
     port = int(os.getenv("PORT", 10000))
 
+    # Starte den separaten /ping-Server
+    start_ping_server(port)
+
     # Telegram-Bot starten
     app = ApplicationBuilder().token(token).build()
     app.add_handler(InlineQueryHandler(inline_query))
     app.add_handler(CommandHandler("start", start))
-    
-    # Benutzerdefinierten Webhandler für /ping hinzufügen
-    app.add_handler(CommandHandler("ping", None), "ping")
-    
+
     logger.info("Telegram-Bot wird gestartet...")
-    
-    # Webserver mit benutzerdefinierten Routen starten
     app.run_webhook(
         listen="0.0.0.0",
         port=port,
-        webhook_url=webhook_url,
-        webhook_path="/telegram",  # Wichtig: Spezifiziere den Pfad für den Telegram-Webhook
-        drop_pending_updates=True,
-        allowed_updates=Update.ALL_TYPES,
-        web_hook_url_path="/ping",  # Dieser Parameter ist ein falscher Name - siehe unten
-        web_hook_callback=ping_handler  # Diese Kombination funktioniert nicht direkt
+        webhook_url=webhook_url
     )
