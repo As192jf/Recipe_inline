@@ -1,5 +1,6 @@
 from telegram import InlineQueryResultArticle, InputTextMessageContent, Update
 from telegram.ext import ApplicationBuilder, ContextTypes, InlineQueryHandler, CommandHandler
+from aiohttp import web  # NEU
 import os
 from uuid import uuid4
 from urllib.parse import quote
@@ -56,8 +57,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     username = user.username or user.first_name
     logger.info(f"/start received from {username} ({user.id})")
-
     await update.message.reply_text("Bot läuft und ist bereit für Inline-Anfragen!")
+
+# Neue /ping Route für GET-Anfragen
+async def ping(request):
+    return web.Response(text="pong")
 
 if __name__ == "__main__":
     token = os.getenv("BOT_TOKEN")
@@ -69,8 +73,14 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
 
     logger.info("Bot wird gestartet...")
+
+    # Aiohttp-App mit /ping-Route
+    web_app = web.Application()
+    web_app.add_routes([web.get("/ping", ping)])
+
     app.run_webhook(
         listen="0.0.0.0",
         port=port,
-        webhook_url=webhook_url
+        webhook_url=webhook_url,
+        web_app=web_app
     )
