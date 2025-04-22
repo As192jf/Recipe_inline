@@ -86,7 +86,7 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
 
     # Starte den separaten /ping-Server
-    start_ping_server(port)
+    # start_ping_server(port)
 
     # Telegram-Bot starten
     app = ApplicationBuilder().token(token).build()
